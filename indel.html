@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>全景场景跳转（自定义热点 + 悬停文字）</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css" />
+    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+    <style>
+        body,
+        html {
+            margin: 0;
+            height: 100%;
+        }
+
+        #panorama {
+            width: 100%;
+            height: 100vh;
+        }
+
+        .custom-hotspot {
+
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            z-index: 1000;
+            pointer-events: auto;
+        }
+
+        .direction-indicator {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            transform-origin: center bottom;
+        }
+
+        .triangle {
+            width: 0;
+            height: 0;
+            border-left: 30px solid transparent;
+            border-right: 30px solid transparent;
+            border-bottom: 16px solid white;
+            opacity: 0.3;
+            animation: blink 1.5s infinite;
+        }
+
+        .triangle:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .triangle:nth-child(2) {
+            animation-delay: 0.3s;
+        }
+
+        .triangle:nth-child(3) {
+            animation-delay: 0.6s;
+        }
+
+        @keyframes blink {
+            0%,
+            100% {
+                opacity: 0.3;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .custom-hotspot .tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 8px;
+            padding: 4px 8px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            font-size: 12px;
+            white-space: nowrap;
+            border-radius: 4px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .custom-hotspot:hover .tooltip {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="panorama"></div>
+
+    <script>
+        function calculateBearing(yaw1, pitch1, yaw2, pitch2) {
+            const φ1 = pitch1 * Math.PI / 180;
+            const λ1 = yaw1 * Math.PI / 180;
+            const φ2 = pitch2 * Math.PI / 180;
+            const λ2 = yaw2 * Math.PI / 180;
+
+            const y = Math.sin(λ2 - λ1) * Math.cos(φ2);
+            const x = Math.cos(φ1) * Math.sin(φ2) -
+                Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1);
+            const θ = Math.atan2(y, x);
+            return ((θ * 180 / Math.PI) + 360) % 360;
+        }
+
+        function createCustomHotspot(hotSpotDiv, args) {
+            hotSpotDiv.classList.add('custom-hotspot');
+
+            const directionIndicator = document.createElement('div');
+            directionIndicator.className = 'direction-indicator';
+
+            for (let i = 0; i < 3; i++) {
+                const tri = document.createElement('div');
+                tri.className = 'triangle';
+                directionIndicator.appendChild(tri);
+            }
+            hotSpotDiv.appendChild(directionIndicator);
+
+            if (args.text) {
+                const tooltip = document.createElement('div');
+                tooltip.className = 'tooltip';
+                tooltip.innerText = args.text;
+                hotSpotDiv.appendChild(tooltip);
+            }
+
+            if (args.directionPoints) {
+                const p1 = args.directionPoints[0];
+                const p2 = args.directionPoints[1];
+                const roadYaw = calculateBearing(p1.yaw, p1.pitch, p2.yaw, p2.pitch);
+                hotSpotDiv.dataset.roadYaw = roadYaw;
+
+                // 初始化旋转角度
+                const currentYaw = (viewer.getYaw() + 360) % 360;
+                const angle = roadYaw - currentYaw;
+                directionIndicator.style.transform = `rotate(${angle}deg)`;
+            }
+
+            hotSpotDiv.addEventListener('click', function (e) {
+                e.stopPropagation();
+                viewer.loadScene(args.sceneId);
+            });
+        }
+
+        const viewer = pannellum.viewer('panorama', {
+            default: {
+                firstScene: 'scene2', // 第一个场景删掉后，默认加载场景二
+                sceneFadeDuration: 1000
+            },
+            scenes: {
+                scene2: {
+                    title: '场景二：房间B',
+                    type: 'equirectangular',
+                    panorama: 'scene2.jpg',
+                    autoLoad: true,
+                    hotSpots: [
+                        
+                        {
+                            pitch: -48.39,
+                            yaw: 7.92,
+                            type: 'custom',
+                            cssClass: 'custom-hotspot',
+                            createTooltipFunc: createCustomHotspot,
+                            createTooltipArgs: {
+                                sceneId: 'scene3',
+                                text: '点我进入房间C',
+                                directionPoints: [
+                                    { pitch: -48.39, yaw: 7.92 },    // 起点
+                                    { pitch: -47.39, yaw: 7.92 } // 终点
+                                ]
+                            }
+                        }
+                    ]
+                },
+                scene3: {
+                    title: '场景三：房间C',
+                    type: 'equirectangular',
+                    panorama: 'scene3.jpg',
+                    autoLoad: true,
+                    hotSpots: [
+                        {
+                            pitch: -23.81,
+                            yaw: 169.90,
+                            type: 'custom',
+                            cssClass: 'custom-hotspot',
+                            createTooltipFunc: createCustomHotspot,
+                            createTooltipArgs: {
+                                sceneId: 'scene2',
+                                text: '返回房间B',
+                                directionPoints: [
+                                    { pitch: -19.29, yaw: 179.11 }, // 起点
+                                    { pitch: -19.29, yaw: 177.11 }        // 终点
+                                ]
+                            }
+                        },
+                        {
+                            pitch: -19.57,
+                            yaw: -142.05,
+                            type: 'custom',
+                            cssClass: 'custom-hotspot',
+                            createTooltipFunc: createCustomHotspot,
+                            createTooltipArgs: {
+                                sceneId: 'scene4',
+                                text: '点我进入房间D',
+                                directionPoints: [
+                                    { pitch: -19.57, yaw: 142.06 },    // 起点
+                                    { pitch: -19.57, yaw: 144.05 } // 终点
+                                ]
+                            }
+                        }
+                    ]
+                },
+                scene4: {
+                    title: '场景四：房间D',
+                    type: 'equirectangular',
+                    panorama: 'scene4.jpg',
+                    autoLoad: true,
+                    hotSpots: [
+                        {
+                            pitch: -20.45,
+                            yaw: -135.76,
+                            type: 'custom',
+                            cssClass: 'custom-hotspot',
+                            createTooltipFunc: createCustomHotspot,
+                            createTooltipArgs: {
+                                sceneId: 'scene3',
+                                text: '返回房间C',
+                                directionPoints: [
+                                    { pitch: -20.45, yaw: -135.76 }, // 起点
+                                    { pitch: -20.45, yaw: -136.76 }        // 终点
+                                ]
+                            }
+                        },
+                        {
+                            pitch: -20.37,
+                            yaw: -131.97,
+                            type: 'custom',
+                            cssClass: 'custom-hotspot',
+                            createTooltipFunc: createCustomHotspot,
+                            createTooltipArgs: {
+                                sceneId: 'scene5',
+                                text: '点我进入房间E',
+                                directionPoints: [
+                                    { pitch: -20.80, yaw: -131.97 },    // 起点
+                                    { pitch: -20.80, yaw: -129.97 } // 终点
+                                ]
+                            }
+                        }
+                    ]
+                },
+                scene5: {
+                    title: '场景五：房间E',
+                    type: 'equirectangular',
+                    panorama: 'scene5.jpg',
+                    autoLoad: true,
+                    hotSpots: [
+                        {
+                            pitch: -35.48,
+                            yaw: 91.44,
+                            type: 'custom',
+                            cssClass: 'custom-hotspot',
+                            createTooltipFunc: createCustomHotspot,
+                            createTooltipArgs: {
+                                sceneId: 'scene4',
+                                text: '返回房间D',
+                                directionPoints: [
+                                    { pitch: -35.48, yaw: 91.44 }, // 起点
+                                    { pitch: -35.48, yaw: 90 }        // 终点
+                                ]
+                            }
+                        },
+                        {
+                            pitch: -26.02,
+                            yaw: 134.15,
+                            type: 'custom',
+                            cssClass: 'custom-hotspot',
+                            createTooltipFunc: createCustomHotspot,
+                            createTooltipArgs: {
+                                sceneId: 'scene6',
+                                text: '点我进入房间F',
+                                directionPoints: [
+                                    { pitch: -26.02, yaw: 134.15 },    // 起点
+                                    { pitch: -26.02, yaw: 135.15 } // 终点
+                                ]
+                            }
+                        }
+                    ]
+                },
+                scene6: {
+                    title: '场景六：房间F',
+                    type: 'equirectangular',
+                    panorama: 'scene6.jpg',
+                    autoLoad: true,
+                    hotSpots: [
+                        {
+                            pitch: -60.56,
+                            yaw: -83.36,
+                            type: 'custom',
+                            cssClass: 'custom-hotspot',
+                            createTooltipFunc: createCustomHotspot,
+                            createTooltipArgs: {
+                                sceneId: 'scene5',
+                                text: '返回房间E',
+                                directionPoints: [
+                                    { pitch: -60.56, yaw: -83.36 }, // 起点
+                                    { pitch: -60.56, yaw: -84.39}  // 终点
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        });
+
+        viewer.on('viewchange', function (data) {
+            const currentYaw = (viewer.getYaw() + 360) % 360;
+            document.querySelectorAll('.custom-hotspot').forEach(hotspot => {
+                const indicator = hotspot.querySelector('.direction-indicator');
+                if (indicator && hotspot.dataset.roadYaw) {
+                    const roadYaw = parseFloat(hotspot.dataset.roadYaw);
+                    const angle = roadYaw - currentYaw;
+                    indicator.style.transform = `rotate(${angle}deg)`;
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
